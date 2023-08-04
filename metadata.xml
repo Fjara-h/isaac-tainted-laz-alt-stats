@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+    <name>Tainted Lazarus Alt Stats</name>
+    <directory>tainted laz alt stats</directory>
+    <id>3014948450</id>
+    <description>Displays Tainted Lazarus' flipped (non-active) variant's stats next to the current version's stats.
+
+[i]Speed and damage values with birthright are not their modified values.[/i]
+
+If there are bugs or suggestions for improvements, please post them on the steam page or https://github.com/Fjara-h/isaac-tainted-laz-alt-stats/issues
+
+Check for TODOs at the top of main.lua to see what may be coming.
+
+Contributors: [url=https://steamcommunity.com/id/fjarah/]@fjarah[/url]
+
+Thanks the creators of Planetarium Chance as I used their mod as a base for my own.
+
+</description>
+    <version>1.2</version>
+    <visibility>Public</visibility>
+    <tag id="Lua"/>
+    <tag id="Tweaks"/>
+    <tag id="Graphics"/>
+</metadata>
