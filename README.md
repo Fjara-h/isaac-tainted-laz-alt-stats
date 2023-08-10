@@ -9,7 +9,7 @@ A mod for The Binding of Issac: Repentance to display Tainted Lazarus' flipped (
 
 
 ***
-###Notes
+### Notes
 _Speed and damage values with birthright are not their modified values._
 
 Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_USE_CARD callback. Calculations cannot be done because there is a damage minimum and speed max that hinder their reliability.
