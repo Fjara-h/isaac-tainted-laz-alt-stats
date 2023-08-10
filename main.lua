@@ -1,120 +1,98 @@
---TODO TESTING:add birthright, wait a frame, get stats, then remove birthright
---TODO TESTING: savegame_reader
----TODO:HUD customization
-local mod = RegisterMod("Tainted Lazarus Alt Stats", 1)
-
 local json = require("json")
 
-mod.initialized = false
+local MOD_NAME = "Tainted Lazarus Alt Stats"
+local MOD_NAME_SHORT = "T.Laz Alt Stats"
+local mod = RegisterMod(MOD_NAME, 1)
+local VERSION = "2.0"
 
----@return boolean
-function mod:shouldDeHook()
-	local reqs = {
-		not mod.initialized,
-		not Game():GetHUD():IsVisible(),
-		Game():GetLevel():GetAbsoluteStage() == LevelStage.STAGE8, -- Home for Dogma/Beast
-		Game():GetSeeds():HasSeedEffect(SeedEffect.SEED_NO_HUD),
-		(Game():GetNumPlayers() > 1 and not mod.storage.hasBirthright) or (Game():GetNumPlayers() > 2 and mod.storage.hasBirthright),
-		(Isaac.GetPlayer(0):GetPlayerType() ~= PlayerType.PLAYER_LAZARUS_B) and (Isaac.GetPlayer(0):GetPlayerType() ~= PlayerType.PLAYER_LAZARUS2_B),
+mod.DefaultPlayerData = {
+	hasBirthright = false,
+	deadLaz = {
+		stats = {
+			speed = 0.9,
+			tears = 2.5,
+			damage = 5.25,
+			range = 6.5,
+			shotspeed = 1,
+			luck = -2,
+		}
+	},
+	aliveLaz = {
+		stats = {
+			speed = 1,
+			tears = 2.73,
+			damage = 3.5,
+			range = 4.5,
+			shotspeed = 1,
+			luck = 0,
+		},
+	},
+}
+
+mod.font = Font()
+mod.font:Load("font/luaminioutlined.fnt")
+mod.format = "%.2f"
+mod.statShift = Vector(0, 0)
+mod.isTaintedLaz = false
+mod.hasFlippedOnceSinceStart = false
+mod.subPlayerHashMap = {}
+
+-- Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_CARD_USE callback.
+--- Calculations cannot be dne because there is a damage minimum and speed max that hinder their reliability.
+
+mod.settings = {
+	transparencies = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1, 1 },
+	stats = {
+		display = true,
+		x = 37,
+		y = 81,
+		interval = 12,
+		scale = 1,
+		alpha = 2,
+		alphaBirthright = 4,
 	}
-	return reqs[1] or reqs[2] or reqs[3] or reqs[4] or reqs[5] or reqs[6]
+}
+mod.playerData = mod.DefaultPlayerData
+
+function mod:save()
+	local jsonString = json.encode( { settings = mod.settings, playerData = mod.playerData } )
+	mod:SaveData(jsonString)
 end
 
-function mod:exit()
-	mod:SaveData(json.encode(mod.storage))
-	mod.initialized = false
-	if(mod:shouldDeHook()) then
-		return
-	end
-end
-
-function mod:drawStatStrings(altChar)
-	local textCoords = mod.topCoord + Game().ScreenShakeOffset
-	mod.font:DrawString(string.format(mod.format, altChar.speed), textCoords.X + 37, textCoords.Y + 1, KColor(1, 1, 1, mod.fontAlpha), 0, true)
-	mod.font:DrawString(string.format(mod.format, altChar.tears), textCoords.X + 37, textCoords.Y + 1 + mod.spacingInterval.Y, KColor(1, 1, 1, mod.fontAlpha), 0, true)
-	mod.font:DrawString(string.format(mod.format, altChar.damage), textCoords.X + 37, textCoords.Y + 1 + mod.spacingInterval.Y * 2, KColor(1, 1, 1, mod.fontAlpha), 0, true)
-	mod.font:DrawString(string.format(mod.format, altChar.range), textCoords.X + 37, textCoords.Y + 1 + mod.spacingInterval.Y * 3, KColor(1, 1, 1, mod.fontAlpha), 0, true)
-	mod.font:DrawString(string.format(mod.format, altChar.shotspeed), textCoords.X + 37, textCoords.Y + 1 + mod.spacingInterval.Y * 4, KColor(1, 1, 1, mod.fontAlpha), 0, true)
-	mod.font:DrawString(string.format(mod.format, altChar.luck), textCoords.X + 37, textCoords.Y + 1 + mod.spacingInterval.Y * 5, KColor(1, 1, 1, mod.fontAlpha), 0, true)
-end
-
-function mod:updateCheck()
-	local updatePos = false
-
-	local activePlayers = Game():GetNumPlayers()
-
-	for i = 0, activePlayers do
-		local player = Isaac.GetPlayer(i)
-		if(player.FrameCount == 0 or mod.playerTypeJustChanged) then
-			updatePos = true
-		end
-	end
-
-	if(mod.numplayers ~= activePlayers) then
-		updatePos = true
-		mod.numplayers = activePlayers
-	end
-
-	-- Certain seed effects block achievements
-	if(mod.NumSeedEffects ~= Game():GetSeeds():CountSeedEffects()) then
-		updatePos = true
-		mod.NumSeedEffects = Game():GetSeeds():CountSeedEffects()
-	end
-
-	if(updatePos) then
-		mod:updatePosition()
+---@param shouldSave boolean
+function mod:onExit(shouldSave)
+	if(shouldSave) then
+		mod:save()
 	end
 end
 
----@param shaderName any
-function mod:onRender(shaderName)
-	if(mod:shouldDeHook()) then
-		return
-	end
-
-	local isShader = shaderName == "UI_DisplayTaintedLazarusAltStats_DummyShader" and true or false
-
-	if((not (Game():IsPaused() and Isaac.GetPlayer(0).ControlsEnabled)) and (not isShader)) then
-		return -- no render when unpaused
-	end
-	if((Game():IsPaused() and Isaac.GetPlayer(0).ControlsEnabled) and isShader) then
-		return -- no shader when paused
-	end
-
-	if((shaderName ~= nil) and (not isShader)) then
-		return
-	end
-
-	mod:updateCheck()
-
-	local playerMain = Isaac.GetPlayer(0)
-	local playerMainType = playerMain:GetPlayerType()
-
-	if(playerMainType == PlayerType.PLAYER_LAZARUS_B) then
-		mod:drawStatStrings(mod.storage.taintedLazDead)
-	elseif(playerMainType == PlayerType.PLAYER_LAZARUS2_B) then
-		mod:drawStatStrings(mod.storage.taintedLazAlive)
-	end
-end
-
--- Written by Xalum
+---@param player EntityPlayer
 ---@return boolean
-function mod:CanRunUnlockAchievements()
-	local machine = Isaac.Spawn(6, 11, 0, Vector.Zero, Vector.Zero, nil)
-	local achievementsEnabled = machine:Exists()
-	machine:Remove()
-
-	return achievementsEnabled
+function mod:isDeadTaintedLazarus(player)
+	return (player:GetPlayerType() == PlayerType.PLAYER_LAZARUS2_B)
 end
 
-function mod:updatePosition()
-	mod.topCoord = Vector(0, 79.5)
-	mod.spacingInterval = Vector(0, 12)
+---@param player EntityPlayer
+---@return boolean
+function mod:isAliveTaintedLazarus(player)
+	return (player:GetPlayerType() == PlayerType.PLAYER_LAZARUS_B)
+end
 
-	-- Check for Hard Mode (icon), Seeded/Challenge (achievement disabled icon) or Daily (destination icon)
-	if((Game().Difficulty == Difficulty.DIFFICULTY_HARD) or (Game():IsGreedMode()) or (not mod:CanRunUnlockAchievements())) then
-		mod.topCoord = mod.topCoord + Vector(0, 16)
-	end
+---@param player EntityPlayer
+function mod:setIsTaintedLazarus(player)
+	mod.isTaintedLaz = (mod:isAliveTaintedLazarus(player) or mod:isDeadTaintedLazarus(player))
+end
+
+---@param tearRange integer
+---@return number
+function mod:convertTearRange(tearRange)
+	return tearRange / 40
+end
+
+---@param maxFireDelay integer
+---@return number
+function mod:convertMaxFireDelay(maxFireDelay)
+	return 30 / (maxFireDelay + 1)
 end
 
 -- See:https://stackoverflow.com/questions/18313171/lua-rounding-numbers-and-then-truncate
@@ -125,119 +103,395 @@ function mod:round(num)
 	return ((num * 100) + (2^52 + 2^51) - (2^52 + 2^51)) / 100
 end
 
----@param range integer
----@return number
-function mod:convertTearRange(range)
-	return range / 40
+---@param player EntityPlayer
+---@return table
+function mod:updatePlayerStats(player)
+	local stats = {}
+	-- Only update speed and damage if neither Lazarus has birthright or if one does, only update the currently active Lazarus
+	--- Speed for alt with birthright is temporarily set to the same speed as the active Lazarus
+	--- Damage for alt with birthright is temporarily reduced to 25% and cannot be accurately calculated 
+	---- Both of these values will be wrong for the next flip if the player uses a stat-up card with birthright
+	if((mod.playerData.hasBirthright == false) or (mod.playerData.hasBirthright and Isaac.GetPlayer(0):GetPlayerType() == player:GetPlayerType())) then
+		stats.speed = mod:round(player.MoveSpeed)
+		stats.damage = mod:round(player.Damage)
+	end
+
+	stats.tears = mod:round(mod:convertMaxFireDelay(player.MaxFireDelay))
+	stats.range = mod:round(mod:convertTearRange(player.TearRange))
+	stats.shotspeed = mod:round(player.ShotSpeed)
+	stats.luck = mod:round(player.Luck)
+	return stats
 end
 
----@param tears integer
----@return number
-function mod:convertMaxFireDelay(tears)
-	return 30 / (tears + 1)
+function mod:updatePlayerData()
+	local player = Isaac.GetPlayer(0)
+	mod:setIsTaintedLazarus(player)
+	if(not mod.isTaintedLaz) then
+		return
+	end
+	local alt = mod:getTaintedLazarusSubPlayer(player)
+	-- alt stats cannot be accessed prior to the first flip, instead use saved or default
+	if(alt == nil or not mod.hasFlippedOnceSinceStart) then
+		return
+	end
+	mod.playerData.hasBirthright = player:HasCollectible(CollectibleType.COLLECTIBLE_BIRTHRIGHT, true) or alt:HasCollectible(CollectibleType.COLLECTIBLE_BIRTHRIGHT, true)
+	local stats = mod:updatePlayerStats(player)
+	local altstats = mod:updatePlayerStats(alt)
+
+	if(mod:isAliveTaintedLazarus(player)) then
+		mod.playerData.aliveLaz.stats = stats
+		if(altstats.speed == nil) then
+			altstats.speed = mod.playerData.deadLaz.stats.speed
+		end
+		if(altstats.damage == nil) then
+			altstats.damage = mod.playerData.deadLaz.stats.damage
+		end
+		mod.playerData.deadLaz.stats = altstats
+	elseif(mod:isDeadTaintedLazarus(player)) then
+		mod.playerData.deadLaz.stats = stats
+		if(altstats.speed == nil) then
+			altstats.speed = mod.playerData.aliveLaz.stats.speed
+		end
+		if(altstats.damage == nil) then
+			altstats.damage = mod.playerData.aliveLaz.stats.damage
+		end
+		mod.playerData.aliveLaz.stats = altstats
+	end
+end
+
+function mod:renderStats()
+	local statsToRender
+	local player = Isaac.GetPlayer(0)
+	if(mod:isAliveTaintedLazarus(player)) then
+		statsToRender = mod.playerData.deadLaz.stats
+	elseif(mod:isDeadTaintedLazarus(player)) then
+		statsToRender = mod.playerData.aliveLaz.stats
+	else
+		return
+	end
+	local statCoordsX = mod.settings.stats.x - Game().ScreenShakeOffset.X
+	local statCoordsY = mod.settings.stats.y - Game().ScreenShakeOffset.Y + mod.statShift.Y
+	local alpha = mod.playerData.hasBirthright and mod.settings.stats.alphaBirthright / 10 or mod.settings.stats.alpha / 10
+	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.speed), statCoordsX, statCoordsY, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
+	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.tears), statCoordsX, statCoordsY + mod.settings.stats.interval, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
+	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.damage), statCoordsX, statCoordsY + mod.settings.stats.interval * 2, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
+	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.range), statCoordsX, statCoordsY + mod.settings.stats.interval * 3, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
+	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.shotspeed), statCoordsX, statCoordsY + mod.settings.stats.interval * 4, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
+	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.luck), statCoordsX, statCoordsY + mod.settings.stats.interval * 5, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
+end
+
+---@return boolean
+function mod:isMultiplayer()
+	local players = {}
+	for i = 0, Game():GetNumPlayers() - 1, 1 do
+		local player = Isaac.GetPlayer(i)
+		players[#players + 1] = player
+	end
+	local controllerIndices = {}
+	local indicesFound = {}
+	for _, player in ipairs(players) do
+		if(not indicesFound[player.ControllerIndex]) then
+			controllerIndices[#controllerIndices + 1] = player.ControllerIndex
+			indicesFound[player.ControllerIndex] = true
+		end
+	end
+	return #controllerIndices > 1
+end
+
+---@return boolean
+function mod:shouldRender()
+	return (Game():GetHUD():IsVisible()) and (Game():GetLevel() ~= LevelStage.STAGE8) and (not Game():GetSeeds():HasSeedEffect(SeedEffect.SEED_NO_HUD)) and (not mod:isMultiplayer()) and (mod.isTaintedLaz)
+end
+
+function mod:postRender()
+	if(not mod:shouldRender()) then
+		return
+	end
+
+	if(mod.settings.stats.display) then
+		mod:renderStats()
+	end
 end
 
 ---@param player EntityPlayer
----@return table
-function mod:getStats(player)
-	return {
-		speed = mod:round(player.MoveSpeed),
-		tears = mod:round(mod:convertMaxFireDelay(player.MaxFireDelay)),
-		damage = mod:round(player.Damage),
-		shotspeed = mod:round(player.ShotSpeed),
-		range = mod:round(mod:convertTearRange(player.TearRange)),
-		luck = mod:round(player.Luck)
-	}
+---@return EntityPlayer
+function mod:getTaintedLazarusSubPlayer(player)
+	local ptrHash = GetPtrHash(player)
+	return mod.subPlayerHashMap[ptrHash]
 end
 
-function mod:updateStats()
-	local playerMain = Isaac.GetPlayer(0)
-	local playerMainType = playerMain:GetPlayerType()
-	local playerAlt = Isaac.GetPlayer(1)
-	local playerAltType = playerAlt:GetPlayerType()
+function mod:postPlayerUpdate()
+	mod:updatePlayerData()
+end
 
-	if(not mod.lastPlayerType) then
-		mod.lastPlayerType = playerMainType
-	elseif(mod.lastPlayerType ~= playerMainType) then
-		mod.playerTypeJustchanged = true;
-		mod.lastPlayerType = playerMainType
-	else
-		mod.playerTypeJustchanged = false;
+---@param player EntityPlayer
+function mod:onFlip(_, __, player)
+	-- After flipping once or starting with birthright, alt stats become initialized
+	if(mod.isTaintedLaz and (mod.hasFlippedOnceSinceStart == false or mod.playerData.hasBirthright)) then
+		mod.hasFlippedOnceSinceStart = true
 	end
+end
 
-	if((playerMainType ~= playerAltType) and (playerMain:GetCollectibleNum(CollectibleType.COLLECTIBLE_BIRTHRIGHT) == 1 or playerAlt:GetCollectibleNum(CollectibleType.COLLECTIBLE_BIRTHRIGHT)  == 1)) then
-		mod.storage.hasBirthright = true
-		mod.fontAlpha = 0.4
-	else
-		mod.storage.hasBirthright = false
-		mod.fontAlpha = 0.2
+---@param player EntityPlayer
+function mod:preFlip(_, __, player)
+	if(mod.hasFlippedOnceSinceStart and mod.isTaintedLaz and mod.playerData.hasBirthright) then
+		if(mod:isAliveTaintedLazarus(player)) then
+			mod.playerData.aliveLaz.stats.speed = player.MoveSpeed
+			mod.playerData.aliveLaz.stats.damage = player.Damage
+		elseif(mod:isDeadTaintedLazarus(player)) then
+			mod.playerData.deadLaz.stats.speed = player.MoveSpeed
+			mod.playerData.deadLaz.stats.damage = player.Damage
+		end
 	end
+end
 
-	if(playerMainType == PlayerType.PLAYER_LAZARUS_B) then
-		mod.storage.taintedLazAlive = mod:getStats(playerMain)
-		--[[if(playerAltType == PlayerType.PLAYER_LAZARUS2_B and mod.storage.hasBirthright) then
-			mod.storage.taintedLazDead = mod:getStats(playerAlt) -- This sets the speeds to the same value since they actually are when playing, along with the reduced damage amount.
-		end]]
-	elseif(playerMainType == PlayerType.PLAYER_LAZARUS2_B) then
-		mod.storage.taintedLazDead = mod:getStats(playerMain)
-		--[[if(playerAltType == PlayerType.PLAYER_LAZARUS_B and mod.storage.hasBirthright) then
-			mod.storage.taintedLazAlive = mod:getStats(playerAlt)
-		end]]
+---@return boolean
+function mod:canRunUnlockAchievements()
+	local greedDonationMachine = Isaac.Spawn(EntityType.ENTITY_SLOT, 11, 0, Vector.Zero, Vector.Zero, nil)
+	local canUnlockAchievements = greedDonationMachine:Exists()
+	greedDonationMachine:Remove()
+	return canUnlockAchievements
+end
+
+function mod:updateStatShift()
+	if((Game().Difficulty == Difficulty.DIFFICULTY_HARD) or (Game():IsGreedMode()) or (not mod:canRunUnlockAchievements())) then
+		mod.statShift = Vector(0, 16)
+	else
+		mod.statShift = Vector(0, 0)
+	end
+end
+
+function mod:load()
+	if(mod:HasData()) then
+		local data = json.decode(mod:LoadData())
+		mod.settings = data.settings
+		mod.playerData = data.playerData
+	end
+	if(mod.playerData == nil) then
+		mod.playerData = mod.DefaultPlayerData
 	end
 end
 
 ---@param isContinued boolean
-function mod:init(isContinued)
-	if(isContinued and mod:HasData()) then
-		mod.storage = json.decode(mod:LoadData())
+function mod:postGameStarted(isContinued)
+	mod:load()
+	if(not isContinued) then
+		mod.playerData = mod.DefaultPlayerData
+	end
+	mod:updateStatShift()
+	local player = Isaac.GetPlayer(0)
+	mod:setIsTaintedLazarus(player)
+	mod.hasFlippedOnceSinceStart = false
+end
+
+local queuedTaintedLazarus = {}
+local queuedDeadTaintedLazarus = {}
+
+---@param player EntityPlayer
+function mod:onUseClicker(_, _, player)
+	mod:taintedLazarusPlayers(player)
+end
+
+--There is MC_POST_PLAYER_INIT on start/continue for each verison of tainted lazarus
+---@param player EntityPlayer
+function mod:taintedLazarusPlayers(player)
+	mod:setIsTaintedLazarus(player)
+	if(not mod.isTaintedLaz) then
+		return
+	end
+	if(mod:isAliveTaintedLazarus(player)) then
+		queuedTaintedLazarus[#queuedTaintedLazarus + 1] = player
+	elseif(mod:isDeadTaintedLazarus(player)) then
+		queuedDeadTaintedLazarus[#queuedDeadTaintedLazarus + 1] = player
 	else
-		mod.storage = mod.defaultData
-		mod:SaveData(json.encode(mod.storage))
+		return
 	end
 
-	mod.font = Font()
-	mod.font:Load("font/luaminioutlined.fnt")
-	mod.fontAlpha = 0.2
+    if((#queuedTaintedLazarus == 0) or (#queuedDeadTaintedLazarus == 0)) then
+        return
+    end
+    local taintedLazarus = table.remove(queuedTaintedLazarus, 1)
+    local deadTaintedLazarus = table.remove(queuedDeadTaintedLazarus, 1)
+    if((taintedLazarus == nil) or (deadTaintedLazarus == nil)) then
+        return
+    end
+    local taintedLazarusPtrHash = GetPtrHash(taintedLazarus)
+    local deadTaintedLazarusPtrHash = GetPtrHash(deadTaintedLazarus)
+    if(taintedLazarusPtrHash == deadTaintedLazarusPtrHash) then
+        print("Failed to cache the Tainted Lazarus player objects, since the hash for Tainted Lazarus and Dead Tainted Lazarus were the same.")
+        return
+    end
 
-	mod:updateStats()
-	mod:updatePosition()
-
-	mod.initialized = true
+    mod.subPlayerHashMap[taintedLazarusPtrHash] = deadTaintedLazarus
+    mod.subPlayerHashMap[deadTaintedLazarusPtrHash] = taintedLazarus
 end
 
-function mod:initStore()
-	mod.storage = {}
-	mod.topCoord = Vector(0, 79.5)
-	mod.format = "%.2f"
-	mod.playerTypeJustchanged = false
-	mod.defaultData = {
-		lastPlayerType = nil,
-		hasBirthright = false,
-		taintedLazAlive = {
-			speed = 1,
-			tears = 2.73,
-			damage = 3.5,
-			shotspeed = 1,
-			range = 4.5,
-			luck = 0
-		},
-		taintedLazDead = {
-			speed = .9,
-			tears = 2.5,
-			damage = 5.25,
-			shotspeed = 1,
-			range = 6.5,
-			luck = -2
+mod:AddCallback(ModCallbacks.MC_POST_PLAYER_INIT, mod.taintedLazarusPlayers)
+mod:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, mod.preFlip, CollectibleType.COLLECTIBLE_FLIP)
+mod:AddCallback(ModCallbacks.MC_USE_ITEM, mod.onUseClicker, CollectibleType.COLLECTIBLE_CLICKER)
+mod:AddCallback(ModCallbacks.MC_USE_ITEM, mod.onFlip, CollectibleType.COLLECTIBLE_FLIP)
+mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, mod.postGameStarted)
+mod:AddCallback(ModCallbacks.MC_POST_PLAYER_UPDATE, mod.postPlayerUpdate)
+mod:AddCallback(ModCallbacks.MC_POST_RENDER, mod.postRender)
+mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, mod.onExit)
+
+----MCM----
+function mod:setupMyModConfigMenuSettings()
+	if(ModConfigMenu == nil) then
+	  return
+	end
+	----INFO----
+	ModConfigMenu.AddSpace(MOD_NAME_SHORT, "Info")
+	ModConfigMenu.AddText(MOD_NAME_SHORT, "Info", function() return MOD_NAME end)
+	ModConfigMenu.AddSpace(MOD_NAME_SHORT, "Info")
+	ModConfigMenu.AddText(MOD_NAME_SHORT, "Info", function() return "Version " .. VERSION end)
+	----STATS----
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.BOOLEAN,
+			CurrentSetting = function()
+				return mod.settings.stats.display
+			end,
+			Display = function()
+				return "Display stats: " .. (mod.settings.stats.display and "on" or "off")
+			end,
+			OnChange = function(b)
+				mod.settings.stats.display = b
+				mod:save()
+			end,
+			Info = { "Display non-active tainted lazarus stats on the screen." }
 		}
-	}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.x
+			end,
+			Minimum = 0,
+			Maximum = 500,
+			ModifyBy = 1,
+			Display = function()
+				return "Position X: " .. mod.settings.stats.x
+			end,
+			OnChange = function(b)
+				mod.settings.stats.x = b
+				mod:save()
+			end,
+			Info = { "Default = 37" }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.y
+			end,
+			Minimum = 0,
+			Maximum = 500,
+			ModifyBy = 1,
+			Display = function()
+				return "Position Y: " .. mod.settings.stats.y
+			end,
+			OnChange = function(b)
+				mod.settings.stats.y = b
+				mod:save()
+			end,
+			Info = { "Default = 81" }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.interval
+			end,
+			Minimum = 0,
+			Maximum = 500,
+			ModifyBy = 1,
+			Display = function()
+				return "Vertical space between stats: " .. mod.settings.stats.interval
+			end,
+			OnChange = function(b)
+				mod.settings.stats.interval = b
+				mod:save()
+			end,
+			Info = {
+				"Default = 12",
+				"Hard difficulty, greed modes, or non-achievmeent runs add 16 automatically"
+			}
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.scale
+			end,
+			Minimum = 0.5,
+			Maximum = 2,
+			ModifyBy = 0.25,
+			Display = function()
+				return "Scale: " .. mod.settings.stats.scale
+			end,
+			OnChange = function(b)
+				mod.settings.stats.scale = b - (b % 0.25)
+				mod:save()
+			end,
+			Info = { "Default = 1" }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.SCROLL,
+			CurrentSetting = function()
+				return mod.settings.stats.alpha
+			end,
+			Display = function()
+				return "Transparency: $scroll" .. mod.settings.stats.alpha
+			end,
+			OnChange = function(b)
+				mod.settings.stats.alpha = b
+				mod:save()
+			end,
+			Info = {
+				"Transparency of stat numbers without birthright. (num / 10)",
+				"Slider default = 2",
+			}
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.SCROLL,
+			CurrentSetting = function()
+				return mod.settings.stats.alphaBirthright
+			end,
+			Display = function()
+				return "Transparency: $scroll" .. mod.settings.stats.alphaBirthright
+			end,
+			OnChange = function(b)
+				mod.settings.stats.alphaBirthright = b
+				mod:save()
+			end,
+			Info = {
+				"Transparency of stat numbers with birthright. (num / 10)",
+				"Slider default = 4",
+			}
+		}
+	)
 end
-
-mod:initStore()
-
-mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, mod.init)
-mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, mod.exit)
-
-mod:AddCallback(ModCallbacks.MC_POST_PLAYER_UPDATE, mod.updateStats)
-
-mod:AddCallback(ModCallbacks.MC_GET_SHADER_PARAMS, mod.onRender)
-mod:AddCallback(ModCallbacks.MC_POST_RENDER, mod.onRender)
+mod:setupMyModConfigMenuSettings()
