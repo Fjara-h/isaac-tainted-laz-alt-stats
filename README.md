@@ -9,8 +9,12 @@ A mod for The Binding of Issac: Repentance to display Tainted Lazarus' flipped (
 
 
 ***
+###Notes
 _Speed and damage values with birthright are not their modified values._
-If you continue a previous run prior to the mod being able to save your data, the displayed value may not be correct, however will correct itself after flipping once.
+
+Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_USE_CARD callback. Calculations cannot be done because there is a damage minimum and speed max that hinder their reliability.
+
+Non-Birthright: Stat changes that are room-duration effects (Lusty Blood) persist in the player stats as that value until the character is flipped backed to when they are updated.
 ***
 
 Steam Workshop Link: https://steamcommunity.com/sharedfiles/filedetails/?id=3014948450
