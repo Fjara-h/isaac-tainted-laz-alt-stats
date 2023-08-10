@@ -38,7 +38,9 @@ mod.hasFlippedOnceSinceStart = false
 mod.subPlayerHashMap = {}
 
 -- Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_CARD_USE callback.
---- Calculations cannot be dne because there is a damage minimum and speed max that hinder their reliability.
+--- Calculations cannot be done because there is a damage minimum and speed max that hinder their reliability.
+
+-- Non-Birthright: Stats that are room-duration effects (Lusty Blood) persist until the character is flipped backed to, otherwise they are not updated.
 
 mod.settings = {
 	transparencies = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1, 1 },
@@ -115,7 +117,6 @@ function mod:updatePlayerStats(player)
 		stats.speed = mod:round(player.MoveSpeed)
 		stats.damage = mod:round(player.Damage)
 	end
-
 	stats.tears = mod:round(mod:convertMaxFireDelay(player.MaxFireDelay))
 	stats.range = mod:round(mod:convertTearRange(player.TearRange))
 	stats.shotspeed = mod:round(player.ShotSpeed)
