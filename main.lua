@@ -3,7 +3,8 @@ local json = require("json")
 local MOD_NAME = "Tainted Lazarus Alt Stats"
 local MOD_NAME_SHORT = "T.Laz Alt Stats"
 local mod = RegisterMod(MOD_NAME, 1)
-local VERSION = "2.0"
+local MAJOR_VERSION = "1"
+local MINOR_VERSION = "4"
 
 mod.DefaultPlayerData = {
 	hasBirthright = false,
@@ -37,12 +38,15 @@ mod.isTaintedLaz = false
 mod.hasFlippedOnceSinceStart = false
 mod.subPlayerHashMap = {}
 
--- Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_CARD_USE callback.
+-- Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_CARD_USE callback and they persist between flips until a new room.
 --- Calculations cannot be done because there is a damage minimum and speed max that hinder their reliability.
 
--- Non-Birthright: Stats that are room-duration effects (Lusty Blood) persist until the character is flipped backed to, otherwise they are not updated.
+-- what if only do calcs if base dmg > 2 or speed < 2 and  on card use just check cards see if doing teh calc wil be right
+--- will 200 damage be reduced to 50 and will be mean it is 200?
 
-mod.settings = {
+-- ClearTemporaryEffects on PreSpawnCleanReward callback does not work because flip occurs before
+
+mod.DefaultSettings = {
 	transparencies = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1, 1 },
 	stats = {
 		display = true,
@@ -52,8 +56,11 @@ mod.settings = {
 		scale = 1,
 		alpha = 2,
 		alphaBirthright = 4,
-	}
+	},
+	version = MAJOR_VERSION
 }
+
+mod.settings = mod.DefaultSettings
 mod.playerData = mod.DefaultPlayerData
 
 function mod:save()
@@ -63,6 +70,7 @@ end
 
 ---@param shouldSave boolean
 function mod:onExit(shouldSave)
+	mod.subPlayerHashMap = {}
 	if(shouldSave) then
 		mod:save()
 	end
@@ -235,6 +243,10 @@ end
 
 ---@param player EntityPlayer
 function mod:preFlip(_, __, player)
+	if(mod.isTaintedLaz and not mod.playerData.hasBirthright) then
+		player:ClearTemporaryEffects() -- Clears effects only for non-birthright becase they dont persist on flip
+		print('test')
+	end
 	if(mod.hasFlippedOnceSinceStart and mod.isTaintedLaz and mod.playerData.hasBirthright) then
 		if(mod:isAliveTaintedLazarus(player)) then
 			mod.playerData.aliveLaz.stats.speed = player.MoveSpeed
@@ -265,17 +277,25 @@ end
 function mod:load()
 	if(mod:HasData()) then
 		local data = json.decode(mod:LoadData())
-		mod.settings = data.settings
-		mod.playerData = data.playerData
+		if(data.settings.version == MAJOR_VERSION) then
+			if(data.settings) then
+				mod.settings = data.settings
+			end
+			if(data.playerData) then
+				mod.playerData = data.playerData
+			end
+		end
 	end
 	if(mod.playerData == nil) then
 		mod.playerData = mod.DefaultPlayerData
+	end
+	if(mod.settings == nil) then
+		mod.settings = mod.DefaultSettings
 	end
 end
 
 ---@param isContinued boolean
 function mod:postGameStarted(isContinued)
-	mod:load()
 	if(not isContinued) then
 		mod.playerData = mod.DefaultPlayerData
 	end
@@ -327,6 +347,7 @@ function mod:taintedLazarusPlayers(player)
     mod.subPlayerHashMap[deadTaintedLazarusPtrHash] = taintedLazarus
 end
 
+mod:load()
 mod:AddCallback(ModCallbacks.MC_POST_PLAYER_INIT, mod.taintedLazarusPlayers)
 mod:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, mod.preFlip, CollectibleType.COLLECTIBLE_FLIP)
 mod:AddCallback(ModCallbacks.MC_USE_ITEM, mod.onUseClicker, CollectibleType.COLLECTIBLE_CLICKER)
