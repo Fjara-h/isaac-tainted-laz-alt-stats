@@ -1,10 +1,9 @@
 local json = require("json")
 
 local MOD_NAME = "Tainted Lazarus Alt Stats"
-local MOD_NAME_SHORT = "T.Laz Alt Stats"
 local mod = RegisterMod(MOD_NAME, 1)
-local MAJOR_VERSION = "1"
-local MINOR_VERSION = "4"
+
+--Re-add MCM
 
 mod.DefaultPlayerData = {
 	hasBirthright = false,
@@ -57,14 +56,13 @@ mod.DefaultSettings = {
 		alpha = 2,
 		alphaBirthright = 4,
 	},
-	version = MAJOR_VERSION
 }
 
 mod.settings = mod.DefaultSettings
 mod.playerData = mod.DefaultPlayerData
 
 function mod:save()
-	local jsonString = json.encode( { settings = mod.settings, playerData = mod.playerData } )
+	local jsonString = json.encode( { playerData = mod.playerData } )
 	mod:SaveData(jsonString)
 end
 
@@ -245,7 +243,6 @@ end
 function mod:preFlip(_, __, player)
 	if(mod.isTaintedLaz and not mod.playerData.hasBirthright) then
 		player:ClearTemporaryEffects() -- Clears effects only for non-birthright becase they dont persist on flip
-		print('test')
 	end
 	if(mod.hasFlippedOnceSinceStart and mod.isTaintedLaz and mod.playerData.hasBirthright) then
 		if(mod:isAliveTaintedLazarus(player)) then
@@ -277,20 +274,12 @@ end
 function mod:load()
 	if(mod:HasData()) then
 		local data = json.decode(mod:LoadData())
-		if(data.settings.version == MAJOR_VERSION) then
-			if(data.settings) then
-				mod.settings = data.settings
-			end
-			if(data.playerData) then
-				mod.playerData = data.playerData
-			end
+		if(data.playerData) then
+			mod.playerData = data.playerData
 		end
 	end
 	if(mod.playerData == nil) then
 		mod.playerData = mod.DefaultPlayerData
-	end
-	if(mod.settings == nil) then
-		mod.settings = mod.DefaultSettings
 	end
 end
 
@@ -356,164 +345,3 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, mod.postGameStarted)
 mod:AddCallback(ModCallbacks.MC_POST_PLAYER_UPDATE, mod.postPlayerUpdate)
 mod:AddCallback(ModCallbacks.MC_POST_RENDER, mod.postRender)
 mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, mod.onExit)
-
-----MCM----
-function mod:setupMyModConfigMenuSettings()
-	if(ModConfigMenu == nil) then
-	  return
-	end
-	----INFO----
-	ModConfigMenu.AddSpace(MOD_NAME_SHORT, "Info")
-	ModConfigMenu.AddText(MOD_NAME_SHORT, "Info", function() return MOD_NAME end)
-	ModConfigMenu.AddSpace(MOD_NAME_SHORT, "Info")
-	ModConfigMenu.AddText(MOD_NAME_SHORT, "Info", function() return "Version " .. VERSION end)
-	----STATS----
-	ModConfigMenu.AddSetting(
-		MOD_NAME_SHORT,
-		"Stats",
-		{
-			Type = ModConfigMenu.OptionType.BOOLEAN,
-			CurrentSetting = function()
-				return mod.settings.stats.display
-			end,
-			Display = function()
-				return "Display stats: " .. (mod.settings.stats.display and "on" or "off")
-			end,
-			OnChange = function(b)
-				mod.settings.stats.display = b
-				mod:save()
-			end,
-			Info = { "Display non-active tainted lazarus stats on the screen." }
-		}
-	)
-	ModConfigMenu.AddSetting(
-		MOD_NAME_SHORT,
-		"Stats",
-		{
-			Type = ModConfigMenu.OptionType.NUMBER,
-			CurrentSetting = function()
-				return mod.settings.stats.x
-			end,
-			Minimum = 0,
-			Maximum = 500,
-			ModifyBy = 1,
-			Display = function()
-				return "Position X: " .. mod.settings.stats.x
-			end,
-			OnChange = function(b)
-				mod.settings.stats.x = b
-				mod:save()
-			end,
-			Info = { "Default = 37" }
-		}
-	)
-	ModConfigMenu.AddSetting(
-		MOD_NAME_SHORT,
-		"Stats",
-		{
-			Type = ModConfigMenu.OptionType.NUMBER,
-			CurrentSetting = function()
-				return mod.settings.stats.y
-			end,
-			Minimum = 0,
-			Maximum = 500,
-			ModifyBy = 1,
-			Display = function()
-				return "Position Y: " .. mod.settings.stats.y
-			end,
-			OnChange = function(b)
-				mod.settings.stats.y = b
-				mod:save()
-			end,
-			Info = { "Default = 81" }
-		}
-	)
-	ModConfigMenu.AddSetting(
-		MOD_NAME_SHORT,
-		"Stats",
-		{
-			Type = ModConfigMenu.OptionType.NUMBER,
-			CurrentSetting = function()
-				return mod.settings.stats.interval
-			end,
-			Minimum = 0,
-			Maximum = 500,
-			ModifyBy = 1,
-			Display = function()
-				return "Vertical space between stats: " .. mod.settings.stats.interval
-			end,
-			OnChange = function(b)
-				mod.settings.stats.interval = b
-				mod:save()
-			end,
-			Info = {
-				"Default = 12",
-				"Hard difficulty, greed modes, or non-achievmeent runs add 16 automatically"
-			}
-		}
-	)
-	ModConfigMenu.AddSetting(
-		MOD_NAME_SHORT,
-		"Stats",
-		{
-			Type = ModConfigMenu.OptionType.NUMBER,
-			CurrentSetting = function()
-				return mod.settings.stats.scale
-			end,
-			Minimum = 0.5,
-			Maximum = 2,
-			ModifyBy = 0.25,
-			Display = function()
-				return "Scale: " .. mod.settings.stats.scale
-			end,
-			OnChange = function(b)
-				mod.settings.stats.scale = b - (b % 0.25)
-				mod:save()
-			end,
-			Info = { "Default = 1" }
-		}
-	)
-	ModConfigMenu.AddSetting(
-		MOD_NAME_SHORT,
-		"Stats",
-		{
-			Type = ModConfigMenu.OptionType.SCROLL,
-			CurrentSetting = function()
-				return mod.settings.stats.alpha
-			end,
-			Display = function()
-				return "Transparency: $scroll" .. mod.settings.stats.alpha
-			end,
-			OnChange = function(b)
-				mod.settings.stats.alpha = b
-				mod:save()
-			end,
-			Info = {
-				"Transparency of stat numbers without birthright. (num / 10)",
-				"Slider default = 2",
-			}
-		}
-	)
-	ModConfigMenu.AddSetting(
-		MOD_NAME_SHORT,
-		"Stats",
-		{
-			Type = ModConfigMenu.OptionType.SCROLL,
-			CurrentSetting = function()
-				return mod.settings.stats.alphaBirthright
-			end,
-			Display = function()
-				return "Transparency: $scroll" .. mod.settings.stats.alphaBirthright
-			end,
-			OnChange = function(b)
-				mod.settings.stats.alphaBirthright = b
-				mod:save()
-			end,
-			Info = {
-				"Transparency of stat numbers with birthright. (num / 10)",
-				"Slider default = 4",
-			}
-		}
-	)
-end
-mod:setupMyModConfigMenuSettings()
