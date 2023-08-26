@@ -1,9 +1,25 @@
 local json = require("json")
 
 local MOD_NAME = "Tainted Lazarus Alt Stats"
+local MOD_NAME_SHORT = "T.Laz Alt Stats"
 local mod = RegisterMod(MOD_NAME, 1)
+local MAJOR_VERSION = "1"
+local MINOR_VERSION = "7"
 
---Re-add MCM
+local Transparencies = { 0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1 }
+
+mod.DefaultSettings = {
+	stats = {
+		display = true,
+		x = 37,
+		y = 81,
+		yShift = 16,
+		interval = 12,
+		scale = 1,
+		alpha = 2,
+		alphaBirthright = 4,
+	},
+}
 
 mod.DefaultPlayerData = {
 	hasBirthright = false,
@@ -32,44 +48,46 @@ mod.DefaultPlayerData = {
 mod.font = Font()
 mod.font:Load("font/luaminioutlined.fnt")
 mod.format = "%.2f"
-mod.statShift = Vector(0, 0)
 mod.isTaintedLaz = false
 mod.hasFlippedOnceSinceStart = false
 mod.subPlayerHashMap = {}
 
--- Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_CARD_USE callback and they persist between flips until a new room.
---- Calculations cannot be done because there is a damage minimum and speed max that hinder their reliability.
+-- Birthright: Speed and damage after card use will be wrong because they can't be stored beforehand, no PRE_CARD_USE callback, and they persist between flips until a new room
+--- Calculations cannot be done based on the flipped or pre-flipped value because of a damage minimum and speed maximum that make it unreliable.
 
 -- what if only do calcs if base dmg > 2 or speed < 2 and  on card use just check cards see if doing teh calc wil be right
 --- will 200 damage be reduced to 50 and will be mean it is 200?
 
 -- ClearTemporaryEffects on PreSpawnCleanReward callback does not work because flip occurs before
 
-mod.DefaultSettings = {
-	transparencies = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1, 1 },
-	stats = {
-		display = true,
-		x = 37,
-		y = 81,
-		interval = 12,
-		scale = 1,
-		alpha = 2,
-		alphaBirthright = 4,
-	},
-}
-
-mod.settings = mod.DefaultSettings
-mod.playerData = mod.DefaultPlayerData
+-- Iterate through tables and subtables to overwrite existing keys and add new keys
+--- Also iterates through key-val pairs of tableTemplate (Defaults), storing keys only if they exist in the default and setting non-default keys to nil
+---@param oldTable table
+---@param newTable table
+function mod:tableMerge(oldTable, newTable, tableTemplate)
+	for key, val in pairs(newTable) do
+		if(type(val) == "table" and type(tableTemplate[key]) == "table") then
+			oldTable[key] = mod:tableMerge(oldTable[key] or {}, newTable[key] or {}, tableTemplate[key] or {})
+		elseif(val ~= nil and tableTemplate[key] ~= nil) then -- Existant, expected entries get overwritten
+			oldTable[key] = newTable[key]
+		elseif(oldTable[key] == nil and tableTemplate[key] ~= nil) then -- Missing entries get default values
+			oldTable[key] = tableTemplate[key]
+		else
+			oldTable[key] = nil
+		end
+	end
+	return oldTable
+end
 
 function mod:save()
-	local jsonString = json.encode( { playerData = mod.playerData } )
+	local jsonString = json.encode( { playerData = mod.playerData, settings = mod.settings } )
 	mod:SaveData(jsonString)
 end
 
 ---@param shouldSave boolean
 function mod:onExit(shouldSave)
 	mod.subPlayerHashMap = {}
-	if(shouldSave) then
+	if(shouldSave and mod.isTaintedLaz) then
 		mod:save()
 	end
 end
@@ -147,22 +165,28 @@ function mod:updatePlayerData()
 
 	if(mod:isAliveTaintedLazarus(player)) then
 		mod.playerData.aliveLaz.stats = stats
-		if(altstats.speed == nil) then
-			altstats.speed = mod.playerData.deadLaz.stats.speed
-		end
-		if(altstats.damage == nil) then
-			altstats.damage = mod.playerData.deadLaz.stats.damage
-		end
-		mod.playerData.deadLaz.stats = altstats
+		mod.playerData.deadLaz.stats = mod:tableMerge(mod.playerData.deadLaz.stats, altstats, mod.DefaultPlayerData)
 	elseif(mod:isDeadTaintedLazarus(player)) then
 		mod.playerData.deadLaz.stats = stats
-		if(altstats.speed == nil) then
-			altstats.speed = mod.playerData.aliveLaz.stats.speed
-		end
-		if(altstats.damage == nil) then
-			altstats.damage = mod.playerData.aliveLaz.stats.damage
-		end
-		mod.playerData.aliveLaz.stats = altstats
+		mod.playerData.aliveLaz.stats = mod:tableMerge(mod.playerData.aliveLaz.stats, altstats, mod.DefaultPlayerData)
+	end
+end
+
+-- This also covers victory laps
+---@return boolean
+function mod:canRunUnlockAchievements()
+	local greedDonationMachine = Isaac.Spawn(EntityType.ENTITY_SLOT, 11, 0, Vector.Zero, Vector.Zero, nil)
+	local canUnlockAchievements = greedDonationMachine:Exists()
+	greedDonationMachine:Remove()
+	return canUnlockAchievements
+end
+
+---@return integer
+function mod:getStatYShift()
+	if((Game().Difficulty == Difficulty.DIFFICULTY_HARD) or (Game():IsGreedMode()) or (not mod:canRunUnlockAchievements())) then
+		return mod.settings.stats.yShift
+	else
+		return 0
 	end
 end
 
@@ -177,8 +201,8 @@ function mod:renderStats()
 		return
 	end
 	local statCoordsX = mod.settings.stats.x - Game().ScreenShakeOffset.X
-	local statCoordsY = mod.settings.stats.y - Game().ScreenShakeOffset.Y + mod.statShift.Y
-	local alpha = mod.playerData.hasBirthright and mod.settings.stats.alphaBirthright / 10 or mod.settings.stats.alpha / 10
+	local statCoordsY = mod.settings.stats.y - Game().ScreenShakeOffset.Y + mod:getStatYShift()
+	local alpha = mod.playerData.hasBirthright and Transparencies[mod.settings.stats.alphaBirthright] or Transparencies[mod.settings.stats.alpha]
 	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.speed), statCoordsX, statCoordsY, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
 	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.tears), statCoordsX, statCoordsY + mod.settings.stats.interval, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
 	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.damage), statCoordsX, statCoordsY + mod.settings.stats.interval * 2, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
@@ -211,11 +235,7 @@ function mod:shouldRender()
 end
 
 function mod:postRender()
-	if(not mod:shouldRender()) then
-		return
-	end
-
-	if(mod.settings.stats.display) then
+	if(mod:shouldRender() and mod.settings.stats.display) then
 		mod:renderStats()
 	end
 end
@@ -242,7 +262,7 @@ end
 ---@param player EntityPlayer
 function mod:preFlip(_, __, player)
 	if(mod.isTaintedLaz and not mod.playerData.hasBirthright) then
-		player:ClearTemporaryEffects() -- Clears effects only for non-birthright becase they dont persist on flip
+		player:ClearTemporaryEffects() -- Clears effects only for non-birthright becase they don't persist on flip
 	end
 	if(mod.hasFlippedOnceSinceStart and mod.isTaintedLaz and mod.playerData.hasBirthright) then
 		if(mod:isAliveTaintedLazarus(player)) then
@@ -255,31 +275,17 @@ function mod:preFlip(_, __, player)
 	end
 end
 
----@return boolean
-function mod:canRunUnlockAchievements()
-	local greedDonationMachine = Isaac.Spawn(EntityType.ENTITY_SLOT, 11, 0, Vector.Zero, Vector.Zero, nil)
-	local canUnlockAchievements = greedDonationMachine:Exists()
-	greedDonationMachine:Remove()
-	return canUnlockAchievements
-end
-
-function mod:updateStatShift()
-	if((Game().Difficulty == Difficulty.DIFFICULTY_HARD) or (Game():IsGreedMode()) or (not mod:canRunUnlockAchievements())) then
-		mod.statShift = Vector(0, 16)
-	else
-		mod.statShift = Vector(0, 0)
-	end
-end
-
 function mod:load()
 	if(mod:HasData()) then
 		local data = json.decode(mod:LoadData())
-		if(data.playerData) then
-			mod.playerData = data.playerData
-		end
+		mod.playerData = mod:tableMerge(mod.DefaultPlayerData, data.playerData, mod.DefaultPlayerData)
+		mod.settings = mod:tableMerge(mod.DefaultSettings, data.settings, mod.DefaultSettings)
 	end
 	if(mod.playerData == nil) then
 		mod.playerData = mod.DefaultPlayerData
+	end
+	if(mod.settings == nil) then
+		mod.settings = mod.DefaultSettings
 	end
 end
 
@@ -288,7 +294,6 @@ function mod:postGameStarted(isContinued)
 	if(not isContinued) then
 		mod.playerData = mod.DefaultPlayerData
 	end
-	mod:updateStatShift()
 	local player = Isaac.GetPlayer(0)
 	mod:setIsTaintedLazarus(player)
 	mod.hasFlippedOnceSinceStart = false
@@ -297,6 +302,7 @@ end
 local queuedTaintedLazarus = {}
 local queuedDeadTaintedLazarus = {}
 
+-- Check that this works, need to set onfirstflip 
 ---@param player EntityPlayer
 function mod:onUseClicker(_, _, player)
 	mod:taintedLazarusPlayers(player)
@@ -345,3 +351,189 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, mod.postGameStarted)
 mod:AddCallback(ModCallbacks.MC_POST_PLAYER_UPDATE, mod.postPlayerUpdate)
 mod:AddCallback(ModCallbacks.MC_POST_RENDER, mod.postRender)
 mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, mod.onExit)
+
+
+----MCM----
+function mod:setupMyModConfigMenuSettings()
+	if(ModConfigMenu == nil) then
+	  return
+	end
+	----INFO----
+	ModConfigMenu.AddSpace(MOD_NAME_SHORT, "Info")
+	ModConfigMenu.AddText(MOD_NAME_SHORT, "Info", function() return MOD_NAME end)
+	ModConfigMenu.AddSpace(MOD_NAME_SHORT, "Info")
+	ModConfigMenu.AddText(MOD_NAME_SHORT, "Info", function() return "Version " .. MAJOR_VERSION .. '.' .. MINOR_VERSION end)
+	----STATS----
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.BOOLEAN,
+			CurrentSetting = function()
+				return mod.settings.stats.display
+			end,
+			Display = function()
+				return "Display stats: " .. (mod.settings.stats.display and "on" or "off")
+			end,
+			OnChange = function(b)
+				mod.settings.stats.display = b
+				mod:save()
+			end,
+			Info = { "Display non-active tainted lazarus stats on the screen." }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.x
+			end,
+			Minimum = 0,
+			Maximum = 500,
+			ModifyBy = 1,
+			Display = function()
+				return "Position X: " .. mod.settings.stats.x
+			end,
+			OnChange = function(b)
+				mod.settings.stats.x = b
+				mod:save()
+			end,
+			Info = { "Default = 37" }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.y
+			end,
+			Minimum = 0,
+			Maximum = 500,
+			ModifyBy = 1,
+			Display = function()
+				return "Position Y: " .. mod.settings.stats.y
+			end,
+			OnChange = function(b)
+				mod.settings.stats.y = b
+				mod:save()
+			end,
+			Info = { "Default = 81" }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.yShift
+			end,
+			Minimum = 0,
+			Maximum = 100,
+			ModifyBy = 1,
+			Display = function()
+				return "Vertical shift: " .. mod.settings.stats.yShift
+			end,
+			OnChange = function(b)
+				mod.settings.stats.yShift = b
+				mod:save()
+			end, 
+			Info = {
+				"'Y' position UI-shift for hard difficulty, greed mode, or non-achievment runs.",
+				"Default = 16",
+			}
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.interval
+			end,
+			Minimum = 0,
+			Maximum = 500,
+			ModifyBy = 1,
+			Display = function()
+				return "Vertical space between stats: " .. mod.settings.stats.interval
+			end,
+			OnChange = function(b)
+				mod.settings.stats.interval = b
+				mod:save()
+			end,
+			Info = {
+				"Vertical space between stats.",
+				"Default = 12",
+			}
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.scale
+			end,
+			Minimum = 0.5,
+			Maximum = 2,
+			ModifyBy = 0.25,
+			Display = function()
+				return "Scale: " .. mod.settings.stats.scale
+			end,
+			OnChange = function(b)
+				mod.settings.stats.scale = b - (b % 0.25)
+				mod:save()
+			end,
+			Info = { "Default = 1" }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.SCROLL,
+			CurrentSetting = function()
+				return mod.settings.stats.alpha
+			end,
+			Display = function()
+				return "Transparency: $scroll" .. mod.settings.stats.alpha
+			end,
+			OnChange = function(b)
+				mod.settings.stats.alpha = b
+				mod:save()
+			end,
+			Info = {
+				"Transparency of stat numbers without birthright. Default = 2",
+				"0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1",
+			}
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.SCROLL,
+			CurrentSetting = function()
+				return mod.settings.stats.alphaBirthright
+			end,
+			Display = function()
+				return "Transparency: $scroll" .. mod.settings.stats.alphaBirthright
+			end,
+			OnChange = function(b)
+				mod.settings.stats.alphaBirthright = b
+				mod:save()
+			end,
+			Info = {
+				"Transparency of stat numbers with birthright. Default = 4",
+				"0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1",
+			}
+		}
+	)
+end
+mod:setupMyModConfigMenuSettings()
