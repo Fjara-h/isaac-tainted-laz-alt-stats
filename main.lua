@@ -4,15 +4,16 @@ local MOD_NAME = "Tainted Lazarus Alt Stats"
 local MOD_NAME_SHORT = "T.Laz Alt Stats"
 local mod = RegisterMod(MOD_NAME, 1)
 local MAJOR_VERSION = "1"
-local MINOR_VERSION = "7"
+local MINOR_VERSION = "8"
 
 local Transparencies = { 0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1 }
 
 mod.DefaultSettings = {
 	stats = {
 		display = true,
-		x = 37,
-		y = 81,
+		x = 36,
+		y = 80,
+		xShift = 0,
 		yShift = 16,
 		interval = 12,
 		scale = 1,
@@ -48,6 +49,7 @@ mod.DefaultPlayerData = {
 mod.font = Font()
 mod.font:Load("font/luaminioutlined.fnt")
 mod.format = "%.2f"
+mod.statShift = Vector(0, 0)
 mod.isTaintedLaz = false
 mod.hasFlippedOnceSinceStart = false
 mod.subPlayerHashMap = {}
@@ -172,24 +174,6 @@ function mod:updatePlayerData()
 	end
 end
 
--- This also covers victory laps
----@return boolean
-function mod:canRunUnlockAchievements()
-	local greedDonationMachine = Isaac.Spawn(EntityType.ENTITY_SLOT, 11, 0, Vector.Zero, Vector.Zero, nil)
-	local canUnlockAchievements = greedDonationMachine:Exists()
-	greedDonationMachine:Remove()
-	return canUnlockAchievements
-end
-
----@return integer
-function mod:getStatYShift()
-	if((Game().Difficulty == Difficulty.DIFFICULTY_HARD) or (Game():IsGreedMode()) or (not mod:canRunUnlockAchievements())) then
-		return mod.settings.stats.yShift
-	else
-		return 0
-	end
-end
-
 function mod:renderStats()
 	local statsToRender
 	local player = Isaac.GetPlayer(0)
@@ -200,8 +184,8 @@ function mod:renderStats()
 	else
 		return
 	end
-	local statCoordsX = mod.settings.stats.x - Game().ScreenShakeOffset.X
-	local statCoordsY = mod.settings.stats.y - Game().ScreenShakeOffset.Y + mod:getStatYShift()
+	local statCoordsX = mod.settings.stats.x - Game().ScreenShakeOffset.X + mod.statShift.X
+	local statCoordsY = mod.settings.stats.y - Game().ScreenShakeOffset.Y + mod.statShift.Y
 	local alpha = mod.playerData.hasBirthright and Transparencies[mod.settings.stats.alphaBirthright] or Transparencies[mod.settings.stats.alpha]
 	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.speed), statCoordsX, statCoordsY, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
 	mod.font:DrawStringScaled(string.format(mod.format, statsToRender.tears), statCoordsX, statCoordsY + mod.settings.stats.interval, mod.settings.stats.scale, mod.settings.stats.scale, KColor(1, 1, 1, alpha), 0, true)
@@ -289,12 +273,30 @@ function mod:load()
 	end
 end
 
+-- This also covers victory laps
+---@return boolean
+function mod:canRunUnlockAchievements()
+	local greedDonationMachine = Isaac.Spawn(EntityType.ENTITY_SLOT, 11, 0, Vector.Zero, Vector.Zero, nil)
+	local canUnlockAchievements = greedDonationMachine:Exists()
+	greedDonationMachine:Remove()
+	return canUnlockAchievements
+end
+
+function mod:setStatShift()
+	if((Game().Difficulty == Difficulty.DIFFICULTY_HARD) or (Game():IsGreedMode()) or (not mod:canRunUnlockAchievements())) then
+		mod.statShift = Vector(mod.settings.stats.xShift, mod.settings.stats.yShift)
+	else
+		mod.statShift = Vector(0, 0)
+	end
+end
+
 ---@param isContinued boolean
 function mod:postGameStarted(isContinued)
 	if(not isContinued) then
 		mod.playerData = mod.DefaultPlayerData
 	end
 	local player = Isaac.GetPlayer(0)
+	mod:setStatShift()
 	mod:setIsTaintedLazarus(player)
 	mod.hasFlippedOnceSinceStart = false
 end
@@ -352,7 +354,6 @@ mod:AddCallback(ModCallbacks.MC_POST_PLAYER_UPDATE, mod.postPlayerUpdate)
 mod:AddCallback(ModCallbacks.MC_POST_RENDER, mod.postRender)
 mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, mod.onExit)
 
-
 ----MCM----
 function mod:setupMyModConfigMenuSettings()
 	if(ModConfigMenu == nil) then
@@ -400,7 +401,7 @@ function mod:setupMyModConfigMenuSettings()
 				mod.settings.stats.x = b
 				mod:save()
 			end,
-			Info = { "Default = 37" }
+			Info = { "Default = " .. mod.DefaultSettings.stats.x }
 		}
 	)
 	ModConfigMenu.AddSetting(
@@ -421,7 +422,32 @@ function mod:setupMyModConfigMenuSettings()
 				mod.settings.stats.y = b
 				mod:save()
 			end,
-			Info = { "Default = 81" }
+			Info = { "Default = " .. mod.DefaultSettings.stats.y }
+		}
+	)
+	ModConfigMenu.AddSetting(
+		MOD_NAME_SHORT,
+		"Stats",
+		{
+			Type = ModConfigMenu.OptionType.NUMBER,
+			CurrentSetting = function()
+				return mod.settings.stats.xShift
+			end,
+			Minimum = 0,
+			Maximum = 100,
+			ModifyBy = 1,
+			Display = function()
+				return "Horizontal shift: " .. mod.settings.stats.xShift
+			end,
+			OnChange = function(b)
+				mod.settings.stats.xShift = b
+				mod:save()
+				mod:setStatShift()
+			end,
+			Info = {
+				"'X' position UI-shift for hard difficulty, greed mode, or non-achievment runs.",
+				"Default = " .. mod.DefaultSettings.stats.xShift,
+			}
 		}
 	)
 	ModConfigMenu.AddSetting(
@@ -441,10 +467,11 @@ function mod:setupMyModConfigMenuSettings()
 			OnChange = function(b)
 				mod.settings.stats.yShift = b
 				mod:save()
-			end, 
+				mod:setStatShift()
+			end,
 			Info = {
 				"'Y' position UI-shift for hard difficulty, greed mode, or non-achievment runs.",
-				"Default = 16",
+				"Default = " .. mod.DefaultSettings.stats.yShift,
 			}
 		}
 	)
@@ -468,7 +495,7 @@ function mod:setupMyModConfigMenuSettings()
 			end,
 			Info = {
 				"Vertical space between stats.",
-				"Default = 12",
+				"Default = " .. mod.DefaultSettings.stats.interval,
 			}
 		}
 	)
@@ -490,7 +517,7 @@ function mod:setupMyModConfigMenuSettings()
 				mod.settings.stats.scale = b - (b % 0.25)
 				mod:save()
 			end,
-			Info = { "Default = 1" }
+			Info = { "Default = " .. mod.DefaultSettings.stats.scale}
 		}
 	)
 	ModConfigMenu.AddSetting(
@@ -509,7 +536,7 @@ function mod:setupMyModConfigMenuSettings()
 				mod:save()
 			end,
 			Info = {
-				"Transparency of stat numbers without birthright. Default = 2",
+				"Transparency of stat numbers without birthright. Default = " .. mod.DefaultSettings.stats.alpha,
 				"0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1",
 			}
 		}
@@ -530,7 +557,7 @@ function mod:setupMyModConfigMenuSettings()
 				mod:save()
 			end,
 			Info = {
-				"Transparency of stat numbers with birthright. Default = 4",
+				"Transparency of stat numbers with birthright. Default = " .. mod.DefaultSettings.stats.alphaBirthright,
 				"0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1",
 			}
 		}
