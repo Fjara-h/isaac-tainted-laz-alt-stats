@@ -4,7 +4,7 @@ local MOD_NAME = "Tainted Lazarus Alt Stats"
 local MOD_NAME_SHORT = "T.Laz Alt Stats"
 local mod = RegisterMod(MOD_NAME, 1)
 local MAJOR_VERSION = "1"
-local MINOR_VERSION = "8"
+local MINOR_VERSION = "10"
 
 local Transparencies = { 0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1 }
 
@@ -66,15 +66,16 @@ mod.subPlayerHashMap = {}
 --- Also iterates through key-val pairs of tableTemplate (Defaults), storing keys only if they exist in the default and setting non-default keys to nil
 ---@param oldTable table
 ---@param newTable table
-function mod:tableMerge(oldTable, newTable, tableTemplate)
+---@param tableTemplate table
+function mod:tableMerge(oldTable, newTable, tableTemplate) --tableTemplate isn't being given the right values?
 	for key, val in pairs(newTable) do
 		if(type(val) == "table" and type(tableTemplate[key]) == "table") then
 			oldTable[key] = mod:tableMerge(oldTable[key] or {}, newTable[key] or {}, tableTemplate[key] or {})
 		elseif(val ~= nil and tableTemplate[key] ~= nil) then -- Existant, expected entries get overwritten
 			oldTable[key] = newTable[key]
-		elseif(oldTable[key] == nil and tableTemplate[key] ~= nil) then -- Missing entries get default values
+		elseif(val == nil and oldTable[key] == nil and tableTemplate[key] ~= nil) then -- Missing entries get default values
 			oldTable[key] = tableTemplate[key]
-		else
+		elseif(tableTemplate[key] == nil) then
 			oldTable[key] = nil
 		end
 	end
@@ -167,10 +168,10 @@ function mod:updatePlayerData()
 
 	if(mod:isAliveTaintedLazarus(player)) then
 		mod.playerData.aliveLaz.stats = stats
-		mod.playerData.deadLaz.stats = mod:tableMerge(mod.playerData.deadLaz.stats, altstats, mod.DefaultPlayerData)
+		mod.playerData.deadLaz.stats = mod:tableMerge(mod.playerData.deadLaz.stats, altstats, mod.DefaultPlayerData.deadLaz.stats)
 	elseif(mod:isDeadTaintedLazarus(player)) then
 		mod.playerData.deadLaz.stats = stats
-		mod.playerData.aliveLaz.stats = mod:tableMerge(mod.playerData.aliveLaz.stats, altstats, mod.DefaultPlayerData)
+		mod.playerData.aliveLaz.stats = mod:tableMerge(mod.playerData.aliveLaz.stats, altstats, mod.DefaultPlayerData.aliveLaz.stats)
 	end
 end
 
