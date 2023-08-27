@@ -1,21 +1,22 @@
-# isaac-tainted-laz-alt-stats
+# tainted-laz-alt-stats
 
-Displays Tainted Lazarus' flipped (non-active) variant's stats next to the current version's stats.
+tainted-laz-alt-stats is a mod for _[The Binding of Isaac: Repentance](https://store.steampowered.com/app/1426300/The_Binding_of_Isaac_Repentance/)_, written in [TypeScript](https://www.typescriptlang.org/) using the [IsaacScript](https://isaacscript.github.io/) framework.
 
-![alt text](https://steamuserimages-a.akamaihd.net/ugc/2032864175672004476/0C865F1086F0CB1117B73F28D650A9273662FD09/)
+## How To Play
 
+For normal people, you can play the mod by subscribing to it on [the Steam Workshop](https://steamcommunity.com/app/250900/workshop/). (Subscribing to the mod will automatically download and install it once you launch the game.)
 
-A mod for The Binding of Issac: Repentance to display Tainted Lazarus' flipped (non-active) variant's stats next to the current version's stats. With birthright, the text will be slightly more visible.
+### How To Compile
 
+If you are a developer, or the mod is not yet uploaded to the Steam Workshop, you can play the mod by compiling the TypeScript code into a "main.lua" file. Perform the following steps:
 
-***
-### Notes
-_Speed and damage values with birthright are not their modified values._
-
-Birthright: Speed and damage after card use will be wrong because they can't be stored pre-card use with no PRE_USE_CARD callback. Calculations cannot be done because there is a damage minimum and speed max that hinder their reliability.
-
-Non-Birthright: Stat changes that are room-duration effects (Lusty Blood) persist in the player stats as that value until the character is flipped backed to when they are updated.
-***
-
-Steam Workshop Link: https://steamcommunity.com/sharedfiles/filedetails/?id=3014948450
-[![Steam Downloads](https://img.shields.io/steam/downloads/3014948450?color=blue&logo=Steam&style=flat-square)](https://steamcommunity.com/sharedfiles/filedetails/?id=3014948450)
+- Download and install [Node.js](https://nodejs.org/en/download/) (Windows Installer .msi, 64-bit).
+- Download and install [Git](https://git-scm.com/download/win) (64-bit Git for Windows setup).
+- Download (or clone) this repository:
+  - Click on the "Code" button in the top-right-corner of this page.
+  - Click on "Download ZIP".
+- Unzip the zip file to a new directory.
+- Open up the repository folder and double-click on the `run.sh` script. If prompted, choose to open it with Git for Windows. You will see a Git Bash terminal window open.
+- The script might ask you some questions, like which save file that you use for testing.
+- If the script is successful, you will see "Compilation successful." (You can continue to leave the terminal window open; it will monitor for changes in your project, and recompile if necessary.)
+- Completely close Isaac if it is already open, and then open the game again, and the mod should be in the list of mods. You can now play or test the mod.

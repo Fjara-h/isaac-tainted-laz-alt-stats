@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<?xml-model href="https://wofsauge.github.io/isaac-xml-validator/xsd/metadata.xsd" ?>
+<metadata>
+  <name>Tainted Lazarus Alt Stats</name>
+  <directory>tainted-laz-alt-stats</directory>
+  <id>3014948450</id>
+  <description>
+    Displays Tainted Lazarus' flipped (non-active) variant's stats next to the current version's stats.
+
+[i]Speed and damage values with birthright are not their modified values.[/i]
+
+Birthright: Speed and damage after card-use will be wrong because there is no access right before the card is used, i.e. no PRE_USE_CARD callback.
+
+Calculations cannot be done based on the flipped or pre-flipped value because of a damage minimum and speed maximum that make it unreliable.
+
+Non-Birthright: Stat changes that are room-duration effects (Lusty Blood) persist in the player stats as that value until the character is flipped backed to when they are updated.
+If there are bugs or suggestions for improvements, please post them on the steam page or https://github.com/Fjara-h/isaac-tainted-laz-alt-stats/issues
+
+Contributors: [url=https://steamcommunity.com/id/fjarah/]@fjarah[/url]
+
+Thanks the creators of Planetarium Chance as I used their mod as a base for my own.
+  </description>
+  <version>2.1</version>
+  <visibility>Public</visibility>
+  <tag id="Lua" />
+  <tag id="Tweaks" />
+  <tag id="Graphics" />
+</metadata>

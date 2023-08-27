@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/IsaacScript/isaacscript/main/packages/isaacscript-cli/schemas/isaacscript-schema.json",
+  "modsDirectory": "C:\\Games\\Steamapps\\common\\The Binding of Isaac Rebirth\\mods",
+  "saveSlot": 1,
+  "isaacScriptCommonDev": false
+}

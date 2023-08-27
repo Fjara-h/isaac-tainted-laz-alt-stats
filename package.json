@@ -1,0 +1,24 @@
+{
+  "name": "tainted-laz-alt-stats",
+  "version": "0.0.0",
+  "description": "A mod for The Binding of Isaac: Repentance.",
+  "keywords": [
+    "isaac",
+    "mod",
+    "rebirth",
+    "afterbirth",
+    "repentance"
+  ],
+  "license": "GPL-3.0",
+  "type": "module",
+  "dependencies": {
+    "isaac-typescript-definitions": "^13.0.27",
+    "isaacscript": "^3.9.2",
+    "isaacscript-common": "^31.5.0",
+    "isaacscript-lint": "^5.5.0",
+    "isaacscript-spell": "^1.2.41",
+    "isaacscript-tsconfig": "^4.0.0",
+    "typescript": "^5.2.2",
+    "typescript-to-lua": "^1.18.0"
+  }
+}
