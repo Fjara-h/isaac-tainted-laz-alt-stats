@@ -1,5 +1,6 @@
 import {
   CollectibleType,
+  Difficulty,
   LevelStage,
   ModCallback,
   PlayerVariant,
@@ -57,6 +58,12 @@ const v = {
     range: 6.5,
     shotspeed: 1,
     luck: -2,
+    addXShift: 0,
+    addYShift: 0,
+    playerCount: 0,
+    hudOffset: 0,
+    numSeedEffect: 0,
+    victoryLapCount: 0,
   },
 };
 mod.saveDataManager("main", v);
@@ -79,9 +86,61 @@ export function main(): void {
   );
   mod.AddCallbackCustom(ModCallbackCustom.POST_FIRST_FLIP, registerPreFlip);
   mod.AddCallbackCustom(ModCallbackCustom.POST_FLIP, postFlip);
-
   Isaac.DebugString(`${MOD_NAME} initialized.`);
   setupMyModConfigMenuSettings();
+}
+
+function updatePosition() {
+  if (
+    !canRunUnlockAchievements() ||
+    Game().Difficulty === Difficulty.HARD ||
+    Game().IsGreedMode()
+  ) {
+    v.run.addXShift = v.persistent.xShift;
+    v.run.addYShift = v.persistent.yShift;
+  } else {
+    v.run.addXShift = 0;
+    v.run.addYShift = 0;
+  }
+  v.run.addXShift += Options.HUDOffset * 20;
+  v.run.addYShift += Options.HUDOffset * 12;
+}
+
+function updateCheck() {
+  let updatePos = false;
+  const activePlayers = Game().GetNumPlayers();
+
+  for (let i = 0; i < activePlayers; i++) {
+    const player = Isaac.GetPlayer(i);
+    if (player.FrameCount === 0) {
+      // do i need didplayerchange or diddualitychange?(not duality i think)
+      updatePos = true;
+    }
+  }
+
+  if (v.run.playerCount !== activePlayers) {
+    updatePos = true;
+    v.run.playerCount = activePlayers;
+  }
+
+  if (v.run.hudOffset !== Options.HUDOffset) {
+    updatePos = true;
+    v.run.hudOffset = Options.HUDOffset;
+  }
+
+  if (v.run.victoryLapCount !== Game().GetVictoryLap()) {
+    updatePos = true;
+    v.run.victoryLapCount = Game().GetVictoryLap();
+  }
+
+  if (v.run.numSeedEffect !== Game().GetSeeds().CountSeedEffects()) {
+    updatePos = true;
+    v.run.numSeedEffect = Game().GetSeeds().CountSeedEffects();
+  }
+
+  if (updatePos) {
+    updatePosition();
+  }
 }
 
 function postRender() {
@@ -92,19 +151,16 @@ function postRender() {
     !Game().GetHUD().IsVisible() ||
     Game().GetLevel().GetStage() === LevelStage.HOME ||
     Game().GetSeeds().HasSeedEffect(SeedEffect.NO_HUD) ||
-    isMultiplayer()
+    isMultiplayer() ||
+    !Options.FoundHUD
   ) {
     return;
   }
-
+  updateCheck();
   const statCoordsX: number =
-    v.persistent.x +
-    (canRunUnlockAchievements() ? v.persistent.xShift : 0) +
-    Game().ScreenShakeOffset.X;
+    v.persistent.x + v.run.addXShift + Game().ScreenShakeOffset.X;
   const statCoordsY: number =
-    v.persistent.y +
-    (canRunUnlockAchievements() ? v.persistent.yShift : 0) +
-    Game().ScreenShakeOffset.Y;
+    v.persistent.y + v.run.addYShift + Game().ScreenShakeOffset.Y;
   const alpha: number = v.run.hasBirthright
     ? transparencies[v.persistent.alphaBirthright] ?? 0.4
     : transparencies[v.persistent.alpha] ?? 0.2;
@@ -287,6 +343,7 @@ function setupMyModConfigMenuSettings() {
       CurrentSetting: () => v.persistent.xShift,
       OnChange: (newValue: number | boolean | undefined) => {
         v.persistent.xShift = newValue as number;
+        updatePosition();
       },
       Info: [
         "'X' position UI-shift for hard difficulty, greed mode, or non-achievement runs.",
@@ -302,6 +359,7 @@ function setupMyModConfigMenuSettings() {
       CurrentSetting: () => v.persistent.yShift,
       OnChange: (newValue: number | boolean | undefined) => {
         v.persistent.yShift = newValue as number;
+        updatePosition();
       },
       Info: [
         "'Y' position UI-shift for hard difficulty, greed mode, or non-achievement runs.",
